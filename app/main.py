@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from ulid import ULID
 
 
 class Usuario(BaseModel):
@@ -39,6 +40,11 @@ def register_routes(app: FastAPI) -> None:
     @app.post("/usuarios")
     async def crear_usuario(usuario: Usuario):
         return {"usuario": usuario}
+    
+    @app.get("/ulid")
+    async def ulid():
+        usuario = str(ULID())
+        return {"ulid": usuario}
 
 
 # Instancia de la app para importación directa si es necesario
