@@ -4,6 +4,7 @@ from ulid import ULID
 
 
 class Usuario(BaseModel):
+    ulid: ULID
     nombre: str
     email: str
 
