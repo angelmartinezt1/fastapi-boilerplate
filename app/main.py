@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from ulid import ULID
+from app.config.settings import app_config
 
 
 class Usuario(BaseModel):
@@ -16,12 +17,12 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Mi FastAPI App",
         description="API con soporte para desarrollo local y Lambda",
-        version="1.0.0"
+        version="1.0.0",
     )
-    
+
     # Registrar rutas
     register_routes(app)
-    
+
     return app
 
 
@@ -29,19 +30,23 @@ def register_routes(app: FastAPI) -> None:
     """
     Registra todas las rutas de la aplicación
     """
-    
+
     @app.get("/")
     async def root():
         return {"message": "Hola mundo!"}
-    
+
     @app.get("/health")
     async def health_check():
-        return {"status": "healthysss"}
-    
+        return {
+            "status": "healthy",
+            "environment": app_config.environment,
+            "version": app_config.app_version,
+        }
+
     @app.post("/usuarios")
     async def crear_usuario(usuario: Usuario):
         return {"usuario": usuario}
-    
+
     @app.get("/ulid")
     async def ulid():
         usuario = str(ULID())

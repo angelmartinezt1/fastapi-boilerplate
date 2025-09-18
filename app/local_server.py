@@ -1,16 +1,28 @@
+# app/local_server.py
 """
 Servidor local para desarrollo
 Ejecutar con: python app/local_server.py
 """
-
+import os
+import sys
+from pathlib import Path
 import uvicorn
+
+# ⬇️ Coloca la raíz del repo (padre de /app) como cwd y en sys.path
+ROOT = Path(__file__).resolve().parents[1]
+os.chdir(ROOT)
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",  # Import string para permitir reload
+        "app.main:app",
         host="127.0.0.1",
         port=8081,
-        reload=True,  # Recarga automática en desarrollo
-        reload_dirs=["app"],  # Solo observar cambios en la carpeta app
-        log_level="info"
+        reload=True,
+        reload_dirs=["app"],
+        log_level="info",
+        # Esto ayuda a uvicorn a resolver la app desde la raíz correcta
+        app_dir=str(ROOT),
+        workers=1,  # evita sorpresas con múltiples workers en dev
     )
