@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from ulid import ULID
 from app.config.settings import app_config
 
+settings = app_config
+
 
 class Usuario(BaseModel):
     ulid: ULID
@@ -39,10 +41,10 @@ def register_routes(app: FastAPI) -> None:
     async def health_check():
         return {
             "status": "healthy",
-            "environment": app_config.environment,
-            "version": app_config.app_version,
-            "debug": app_config.debug,
-            "is_lambda": app_config.is_lambda,
+            "environment": settings.environment,
+            "version": settings.app_version,
+            "debug": settings.debug,
+            "is_lambda": settings.is_lambda,
         }
 
     @app.post("/usuarios")
