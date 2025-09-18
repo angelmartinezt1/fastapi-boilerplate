@@ -1,5 +1,6 @@
 from .base import BaseConfig
 from typing import Optional
+import os
 
 
 class AppConfig(BaseConfig):
@@ -18,3 +19,12 @@ class AppConfig(BaseConfig):
     @property
     def is_production(self) -> bool:
         return self.environment.lower() in ["production", "prod"]
+
+    @property
+    def is_lambda(self) -> bool:
+        """Detect if running in AWS Lambda environment"""
+        return (
+            os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None
+            or os.getenv("AWS_EXECUTION_ENV") is not None
+            or os.getenv("LAMBDA_RUNTIME_DIR") is not None
+        )

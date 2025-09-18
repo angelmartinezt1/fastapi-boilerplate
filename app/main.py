@@ -41,6 +41,8 @@ def register_routes(app: FastAPI) -> None:
             "status": "healthy",
             "environment": app_config.environment,
             "version": app_config.app_version,
+            "debug": app_config.debug,
+            "is_lambda": app_config.is_lambda,
         }
 
     @app.post("/usuarios")
