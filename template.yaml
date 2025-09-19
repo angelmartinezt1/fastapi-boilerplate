@@ -1,69 +1,101 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
+Description: FastAPI on Lambda + API Gateway HTTP API v2
 
-Description: >
-  FastAPI Application with Lambda and API Gateway HTTP API v2
+Parameters:
+  Environment:
+    Type: String
+    Default: development
+    AllowedValues: [development, production]
+    Description: Environment name
+  ApiGatewayStageName:
+    Type: String
+    Default: $default
+    Description: HTTP API stage name ($default recommended)
+  VpcId:
+    Type: String
+    Default: ""
+    Description: (Optional) VPC ID. Leave empty if not using VPC.
+  SubnetIds:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: (Optional) Subnet IDs (comma-separated). Leave empty if not using VPC.
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: (Optional) Security Group IDs (comma-separated). Leave empty if not using VPC.
 
-# Configuración global
+Conditions:
+  HasVPC: !And
+    - !Not [ !Equals [ !Ref VpcId, "" ] ]
+    - !Not [ !Equals [ !Select [0, !Ref SubnetIds], "" ] ]
+    - !Not [ !Equals [ !Select [0, !Ref SecurityGroupIds], "" ] ]
+  IsProd: !Equals [!Ref Environment, "production"]
+
 Globals:
   Function:
     Timeout: 30
     MemorySize: 512
     Runtime: python3.11
+    Architectures: [arm64]
+    Tracing: Active
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        LOG_LEVEL: !If [IsProd, "info", "debug"]
+        PYTHONPATH: /var/task
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: INFO
+      SystemLogLevel: INFO
+      LogGroup: !Sub "/aws/lambda/${AWS::StackName}"
+    VpcConfig: !If
+      - HasVPC
+      - 
+        SecurityGroupIds: !Ref SecurityGroupIds
+        SubnetIds: !Ref SubnetIds
+      - !Ref "AWS::NoValue"
 
 Resources:
-  # Función Lambda
+  FastAPIHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref ApiGatewayStageName
+      CorsConfiguration:
+        AllowCredentials: false
+        AllowHeaders: ["*"]
+        AllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+        AllowOrigins: ["*"]
+        MaxAge: 600
+
   FastAPIFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Description: FastAPI Lambda Function
       CodeUri: ./
       Handler: app.lambda_handler.handler
-      Description: FastAPI Lambda Function
-      Environment:
-        Variables:
-          PYTHONPATH: /var/task
       Events:
-        # API Gateway HTTP API v2 - Todas las rutas
-        ApiEvent:
+        AnyRoute:
           Type: HttpApi
           Properties:
             ApiId: !Ref FastAPIHttpApi
             Method: ANY
             Path: /{proxy+}
-        # Ruta raíz
-        RootApiEvent:
+        Root:
           Type: HttpApi
           Properties:
             ApiId: !Ref FastAPIHttpApi
             Method: ANY
             Path: /
-
-  # API Gateway HTTP API v2
-  FastAPIHttpApi:
-    Type: AWS::Serverless::HttpApi
-    Properties:
-      # CORS básico
-      CorsConfiguration:
-        AllowCredentials: false
-        AllowHeaders:
-          - "*"
-        AllowMethods:
-          - GET
-          - POST
-          - PUT
-          - DELETE
-          - OPTIONS
-        AllowOrigins:
-          - "*"
-        MaxAge: 600
+      Policies:
+        - CloudWatchLogsFullAccess
+      # (Opcional) Ajustes adicionales:
+      # Layers: [arn:aws:lambda:...:layer:your-shared-layer:1]
 
 Outputs:
-  # URL de la API
   ApiUrl:
-    Description: "API Gateway HTTP API URL"
-    Value: !Sub "https://${FastAPIHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
-
-  # Nombre de la función Lambda
+    Description: "HTTP API URL"
+    Value: !Sub "https://${FastAPIHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayStageName == '$default' ? '' : ApiGatewayStageName}"
   FunctionName:
     Description: "Lambda Function Name"
     Value: !Ref FastAPIFunction

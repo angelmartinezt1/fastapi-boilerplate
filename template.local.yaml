@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  FastAPI Application with Lambda and API Gateway HTTP API v2
+
+# Configuración global
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.11
+
+Resources:
+  # Función Lambda
+  FastAPIFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: app.lambda_handler.handler
+      Description: FastAPI Lambda Function
+      Environment:
+        Variables:
+          PYTHONPATH: /var/task
+      Events:
+        # API Gateway HTTP API v2 - Todas las rutas
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FastAPIHttpApi
+            Method: ANY
+            Path: /{proxy+}
+        # Ruta raíz
+        RootApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FastAPIHttpApi
+            Method: ANY
+            Path: /
+
+  # API Gateway HTTP API v2
+  FastAPIHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      # CORS básico
+      CorsConfiguration:
+        AllowCredentials: false
+        AllowHeaders:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowOrigins:
+          - "*"
+        MaxAge: 600
+
+Outputs:
+  # URL de la API
+  ApiUrl:
+    Description: "API Gateway HTTP API URL"
+    Value: !Sub "https://${FastAPIHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
+
+  # Nombre de la función Lambda
+  FunctionName:
+    Description: "Lambda Function Name"
+    Value: !Ref FastAPIFunction

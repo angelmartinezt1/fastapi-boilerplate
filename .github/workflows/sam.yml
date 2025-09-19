@@ -1,0 +1,149 @@
+name: Deploy T1 FastAPI Python
+
+on:
+  push:
+    branches: [develop, main, master]
+  pull_request:
+    types: [closed]
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - production
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+jobs:
+  deploy:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'development') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.ref }}" = "refs/heads/master" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            ENVIRONMENT="production"
+          else
+            ENVIRONMENT="development"
+          fi
+
+          echo "ENVIRONMENT=${ENVIRONMENT}" >> $GITHUB_ENV
+          echo "STACK_NAME=t1-fastapi-${ENVIRONMENT}" >> $GITHUB_ENV
+          echo "API_STAGE_NAME=\$default" >> $GITHUB_ENV
+          echo "🚀 Deploying to ${ENVIRONMENT} environment"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+
+      - name: Install AWS tools (SAM/CLI)
+        run: |
+          python -m pip install --upgrade pip
+          pip install aws-sam-cli awscli
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_OIDC }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # (Opcional) Corre tests rápidos si tienes pytest
+      - name: Install app deps for tests (optional)
+        if: hashFiles('requirements.txt') != ''
+        run: |
+          pip install -r requirements.txt
+          # pytest -q || true
+
+      - name: Check and handle existing stack
+        run: |
+          echo "🔍 Checking stack status: ${{ env.STACK_NAME }}"
+          if aws cloudformation describe-stacks --stack-name "${{ env.STACK_NAME }}" 2>/dev/null; then
+            STACK_STATUS=$(aws cloudformation describe-stacks --stack-name "${{ env.STACK_NAME }}" --query "Stacks[0].StackStatus" --output text)
+            echo "📊 Stack exists with status: $STACK_STATUS"
+            if [ "$STACK_STATUS" = "ROLLBACK_COMPLETE" ] || [ "$STACK_STATUS" = "CREATE_FAILED" ]; then
+              echo "🗑️ Deleting failed stack..."
+              aws cloudformation delete-stack --stack-name "${{ env.STACK_NAME }}"
+              aws cloudformation wait stack-delete-complete --stack-name "${{ env.STACK_NAME }}"
+              echo "✅ Stack deleted"
+            fi
+          else
+            echo "ℹ️ Stack does not exist - will create new stack"
+          fi
+
+      - name: SAM build (manylinux via container)
+        run: |
+          # Usa contenedor para compilar wheels compatibles
+          sam build --use-container
+
+      - name: Create samconfig.toml and deploy
+        run: |
+          echo "🚀 Deploying to ${{ env.ENVIRONMENT }}..."
+
+          cat > samconfig.toml << 'EOF'
+          version = 0.1
+          [default.deploy.parameters]
+          stack_name = "${{ env.STACK_NAME }}"
+          resolve_s3 = true
+          s3_prefix = "t1-fastapi"
+          region = "${{ env.AWS_REGION }}"
+          confirm_changeset = false
+          capabilities = "CAPABILITY_IAM"
+          parameter_overrides = [
+            "Environment=${{ env.ENVIRONMENT }}",
+            "ApiGatewayStageName=${{ env.API_STAGE_NAME }}",
+            # Descomenta y rellena si usas VPC:
+            # "VpcId=${{ vars.VPC_ID }}",
+            # "SubnetIds=${{ vars.SUBNET_IDS }}",
+            # "SecurityGroupIds=${{ vars.SECURITY_GROUP_IDS }}"
+          ]
+          EOF
+
+          sam deploy --no-fail-on-empty-changeset
+
+      - name: Get deployment outputs
+        id: outputs
+        run: |
+          echo "📊 Getting deployment outputs..."
+          OUTPUTS=$(aws cloudformation describe-stacks --stack-name "${{ env.STACK_NAME }}" --query "Stacks[0].Outputs" --output json)
+
+          API_URL=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApiUrl") | .OutputValue // "N/A"')
+          LAMBDA_NAME=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="FunctionName") | .OutputValue // "N/A"')
+
+          echo "api-url=${API_URL}" >> $GITHUB_OUTPUT
+          echo "lambda-name=${LAMBDA_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Output deployment information
+        if: success()
+        run: |
+          echo "🎉 Deployment completed successfully!"
+          echo "Environment: ${{ env.ENVIRONMENT }}"
+          echo "Stack: ${{ env.STACK_NAME }}"
+          echo "Region: ${{ env.AWS_REGION }}"
+          echo "API URL: ${{ steps.outputs.outputs.api-url }}"
+          echo "Lambda: ${{ steps.outputs.outputs.lambda-name }}"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check CloudFormation console for details."
