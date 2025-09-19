@@ -31,6 +31,7 @@ Conditions:
     - !Not [ !Equals [ !Select [0, !Ref SubnetIds], "" ] ]
     - !Not [ !Equals [ !Select [0, !Ref SecurityGroupIds], "" ] ]
   IsProd: !Equals [!Ref Environment, "production"]
+  IsDefaultStage: !Equals [!Ref ApiGatewayStageName, "$default"]
 
 Globals:
   Function:
@@ -89,13 +90,15 @@ Resources:
             Path: /
       Policies:
         - CloudWatchLogsFullAccess
-      # (Opcional) Ajustes adicionales:
       # Layers: [arn:aws:lambda:...:layer:your-shared-layer:1]
 
 Outputs:
   ApiUrl:
     Description: "HTTP API URL"
-    Value: !Sub "https://${FastAPIHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayStageName == '$default' ? '' : ApiGatewayStageName}"
+    Value: !If
+      - IsDefaultStage
+      - !Sub "https://${FastAPIHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
+      - !Sub "https://${FastAPIHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayStageName}"
   FunctionName:
     Description: "Lambda Function Name"
     Value: !Ref FastAPIFunction
