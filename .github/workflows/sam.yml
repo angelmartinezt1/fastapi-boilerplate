@@ -42,7 +42,6 @@ jobs:
           else
             ENVIRONMENT="development"
           fi
-
           echo "ENVIRONMENT=${ENVIRONMENT}" >> $GITHUB_ENV
           echo "STACK_NAME=t1-fastapi-${ENVIRONMENT}" >> $GITHUB_ENV
           echo "API_STAGE_NAME=\$default" >> $GITHUB_ENV
@@ -67,7 +66,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_OIDC }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # (Opcional) Corre tests rápidos si tienes pytest
+      # (Opcional) Tests rápidos
       - name: Install app deps for tests (optional)
         if: hashFiles('requirements.txt') != ''
         run: |
@@ -90,10 +89,12 @@ jobs:
             echo "ℹ️ Stack does not exist - will create new stack"
           fi
 
-      - name: SAM build (manylinux via container)
+      - name: SAM build (x86_64, sin contenedor)
+        env:
+          SAM_CLI_TELEMETRY: 0
         run: |
-          # Usa contenedor para compilar wheels compatibles
-          sam build --use-container
+          # Requiere que tu template.yaml tenga Architectures: [x86_64]
+          sam build --cached
 
       - name: Create samconfig.toml and deploy
         run: |
@@ -125,10 +126,8 @@ jobs:
         run: |
           echo "📊 Getting deployment outputs..."
           OUTPUTS=$(aws cloudformation describe-stacks --stack-name "${{ env.STACK_NAME }}" --query "Stacks[0].Outputs" --output json)
-
           API_URL=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApiUrl") | .OutputValue // "N/A"')
           LAMBDA_NAME=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="FunctionName") | .OutputValue // "N/A"')
-
           echo "api-url=${API_URL}" >> $GITHUB_OUTPUT
           echo "lambda-name=${LAMBDA_NAME}" >> $GITHUB_OUTPUT
 
