@@ -1,0 +1,33 @@
+{
+    "repo": {
+        "variables": {
+            "AWS_REGION": "us-east-1",
+            "AWS_ROLE_OIDC": "arn:aws:iam::123456789012:role/github-oidc-deploy-role"
+        },
+        "secrets": {
+            "DB_PASSWORD": "${DB_PASSWORD}"
+        }
+    },
+    "environments": [
+        {
+            "name": "development",
+            "variables": {
+                "API_STAGE_NAME": "$default",
+                "AWS_REGION": "us-east-1",
+                "AWS_ROLE_OIDC": "arn:aws:iam::888577062296:role/GithubActionsRole"
+            },
+            "secrets": {
+                "DB_PASSWORD": "${DB_PASSWORD_DEV}"
+            }
+        },
+        {
+            "name": "production",
+            "variables": {
+                "API_STAGE_NAME": "$default"
+            },
+            "secrets": {
+                "DB_PASSWORD": "${DB_PASSWORD_PROD}"
+            }
+        }
+    ]
+}
