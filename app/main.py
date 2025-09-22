@@ -1,11 +1,22 @@
 from fastapi import FastAPI
 from app.routers import root, health, users, ulid
+from app.utils.logger import setup_logger
+from app.config.settings import app_config
 
 
 def create_app() -> FastAPI:
     """
     App factory - Crea y configura la aplicación FastAPI
     """
+    # Setup logger
+    logger = setup_logger(app_config.log_level)
+    logger.info("Starting FastAPI application", extra={"extra_data": {
+        "app_name": app_config.app_name,
+        "version": app_config.app_version,
+        "environment": app_config.environment,
+        "debug": app_config.debug
+    }})
+
     app = FastAPI(
         title="Mi FastAPI App",
         description="API con soporte para desarrollo local y Lambda",
@@ -15,6 +26,7 @@ def create_app() -> FastAPI:
     # Registrar rutas
     register_routes(app)
 
+    logger.info("FastAPI application setup completed")
     return app
 
 

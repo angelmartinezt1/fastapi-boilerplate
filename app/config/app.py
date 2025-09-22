@@ -11,6 +11,7 @@ class AppConfig(BaseConfig):
     app_version: str = "1.0.0"
     debug: bool = False
     environment: str = "production"
+    log_level: str = "INFO"
 
     @property
     def is_development(self) -> bool:
