@@ -1,15 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
-from ulid import ULID
-from app.config.settings import app_config
-
-settings = app_config
-
-
-class Usuario(BaseModel):
-    ulid: ULID
-    nombre: str
-    email: str
+from app.routers import root, health, users, ulid
 
 
 def create_app() -> FastAPI:
@@ -32,29 +22,10 @@ def register_routes(app: FastAPI) -> None:
     """
     Registra todas las rutas de la aplicación
     """
-
-    @app.get("/")
-    async def root():
-        return {"message": "Hola mundo!"}
-
-    @app.get("/health")
-    async def health_check():
-        return {
-            "status": "healthy",
-            "environment": settings.environment,
-            "version": settings.app_version,
-            "debug": settings.debug,
-            "is_lambda": settings.is_lambda,
-        }
-
-    @app.post("/usuarios")
-    async def crear_usuario(usuario: Usuario):
-        return {"usuario": usuario}
-
-    @app.get("/ulid")
-    async def ulid():
-        usuario = str(ULID())
-        return {"ulid": usuario}
+    app.include_router(root.router)
+    app.include_router(health.router)
+    app.include_router(users.router)
+    app.include_router(ulid.router)
 
 
 # Instancia de la app para importación directa si es necesario
