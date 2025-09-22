@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from ulid import ULID
+from app.schemas.response import StandardResponse
+from app.utils.response import create_success_response
 
 router = APIRouter()
 
@@ -11,6 +13,15 @@ class Usuario(BaseModel):
     email: str
 
 
-@router.post("/usuarios")
+class UsuarioResponse(BaseModel):
+    usuario: Usuario
+
+
+@router.post("/usuarios", response_model=StandardResponse[UsuarioResponse])
 async def crear_usuario(usuario: Usuario):
-    return {"usuario": usuario}
+    data = UsuarioResponse(usuario=usuario)
+
+    return create_success_response(
+        data=data,
+        message="Usuario created successfully"
+    )
