@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: FastAPI on Lambda + API Gateway HTTP API v2
+Description: FastAPI on Lambda + API Gateway REST API
 
 Parameters:
   Environment:
@@ -10,8 +10,8 @@ Parameters:
     Description: Environment name
   ApiGatewayStageName:
     Type: String
-    Default: $default
-    Description: HTTP API stage name ($default recommended)
+    Default: prod
+    Description: REST API stage name
   VpcId:
     Type: String
     Default: ""
@@ -31,7 +31,6 @@ Conditions:
     - !Not [ !Equals [ !Select [0, !Ref SubnetIds], "" ] ]
     - !Not [ !Equals [ !Select [0, !Ref SecurityGroupIds], "" ] ]
   IsProd: !Equals [!Ref Environment, "production"]
-  IsDefaultStage: !Equals [!Ref ApiGatewayStageName, "$default"]
 
 Globals:
   Function:
@@ -58,16 +57,91 @@ Globals:
       - !Ref "AWS::NoValue"
 
 Resources:
-  FastAPIHttpApi:
-    Type: AWS::Serverless::HttpApi
+  # Lambda Authorizer for JWT validation
+  JwtAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
     Properties:
+      Name: !Sub "${AWS::StackName}-jwt-authorizer"
+      Type: TOKEN
+      AuthorizerUri: arn:aws:lambda:us-east-1:888577062296:function:authorizer
+      AuthorizerCredentials: !GetAtt ApiGatewayInvokeRole.Arn
+      IdentitySource: method.request.header.Authorization
+      AuthorizerResultTtlInSeconds: 300
+      RestApiId: !Ref FastAPIRestApi
+
+  # IAM Role for API Gateway to invoke Lambda Authorizer
+  ApiGatewayInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: arn:aws:lambda:us-east-1:888577062296:function:authorizer
+
+  FastAPIRestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "${AWS::StackName}-api"
       StageName: !Ref ApiGatewayStageName
-      CorsConfiguration:
+      Cors:
         AllowCredentials: false
-        AllowHeaders: ["*"]
-        AllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
-        AllowOrigins: ["*"]
-        MaxAge: 600
+        AllowHeaders: "'*'"
+        AllowMethods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
+        AllowOrigin: "'*'"
+        MaxAge: "'600'"
+      DefinitionBody:
+        swagger: "2.0"
+        info:
+          title: !Sub "${AWS::StackName} API"
+          version: "1.0"
+        paths:
+          # Protected /me endpoint with authorizer
+          /me:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FastAPIFunction.Arn}/invocations"
+              security:
+                - JwtAuthorizer: []
+          # All other routes without authorizer
+          /{proxy+}:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FastAPIFunction.Arn}/invocations"
+          /:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FastAPIFunction.Arn}/invocations"
+        securityDefinitions:
+          JwtAuthorizer:
+            type: apiKey
+            name: Authorization
+            in: header
+            x-amazon-apigateway-authorizer:
+              type: token
+              authorizerUri: arn:aws:lambda:us-east-1:888577062296:function:authorizer
+              authorizerCredentials: !GetAtt ApiGatewayInvokeRole.Arn
+              identitySource: method.request.header.Authorization
+              authorizerResultTtlInSeconds: 300
 
   FastAPIFunction:
     Type: AWS::Serverless::Function
@@ -76,29 +150,39 @@ Resources:
       CodeUri: ./
       Handler: app.lambda_handler.handler
       Events:
-        AnyRoute:
-          Type: HttpApi
+        # General API routes
+        ApiEvent:
+          Type: Api
           Properties:
-            ApiId: !Ref FastAPIHttpApi
-            Method: ANY
+            RestApiId: !Ref FastAPIRestApi
             Path: /{proxy+}
-        Root:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref FastAPIHttpApi
             Method: ANY
+        RootEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref FastAPIRestApi
             Path: /
+            Method: ANY
+        # Protected /me endpoint
+        MeEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref FastAPIRestApi
+            Path: /me
+            Method: GET
+            Auth:
+              Authorizer: JwtAuthorizer
       Policies:
         - CloudWatchLogsFullAccess
       # Layers: [arn:aws:lambda:...:layer:your-shared-layer:1]
 
 Outputs:
   ApiUrl:
-    Description: "HTTP API URL"
-    Value: !If
-      - IsDefaultStage
-      - !Sub "https://${FastAPIHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
-      - !Sub "https://${FastAPIHttpApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayStageName}"
+    Description: "REST API URL"
+    Value: !Sub "https://${FastAPIRestApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayStageName}"
   FunctionName:
     Description: "Lambda Function Name"
     Value: !Ref FastAPIFunction
+  AuthorizerArn:
+    Description: "JWT Authorizer ARN"
+    Value: arn:aws:lambda:us-east-1:888577062296:function:authorizer
