@@ -1,5 +1,7 @@
 from fastapi import FastAPI
-from app.routers import root, health, users, ulid
+from app.routers import root, users, ulid
+from app.api import health
+from app.api.v1 import sellers
 from app.utils.logger import setup_logger
 from app.config.settings import app_config
 
@@ -38,6 +40,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(health.router)
     app.include_router(users.router)
     app.include_router(ulid.router)
+    app.include_router(sellers.router)
 
 
 # Instancia de la app para importación directa si es necesario
