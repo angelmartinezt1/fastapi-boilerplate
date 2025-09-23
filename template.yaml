@@ -57,40 +57,6 @@ Globals:
       - !Ref "AWS::NoValue"
 
 Resources:
-  # Lambda Authorizer for JWT validation
-  JwtAuthorizer:
-    Type: AWS::ApiGateway::Authorizer
-    Properties:
-      Name: !Sub "${AWS::StackName}-jwt-authorizer"
-      Type: TOKEN
-      AuthorizerUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:888577062296:function:authorizer/invocations"
-      AuthorizerCredentials: !GetAtt ApiGatewayInvokeRole.Arn
-      IdentitySource: method.request.header.Authorization
-      AuthorizerResultTtlInSeconds: 300
-      RestApiId: !Ref FastAPIRestApi
-
-  # IAM Role for API Gateway to invoke Lambda Authorizer
-  ApiGatewayInvokeRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - apigateway.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      Policies:
-        - PolicyName: InvokeLambdaPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - lambda:InvokeFunction
-                Resource: arn:aws:lambda:us-east-1:888577062296:function:authorizer
 
   FastAPIRestApi:
     Type: AWS::Serverless::Api
@@ -103,45 +69,12 @@ Resources:
         AllowMethods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
         AllowOrigin: "'*'"
         MaxAge: "'600'"
-      DefinitionBody:
-        swagger: "2.0"
-        info:
-          title: !Sub "${AWS::StackName} API"
-          version: "1.0"
-        paths:
-          # All routes without authorizer first
-          /{proxy+}:
-            x-amazon-apigateway-any-method:
-              x-amazon-apigateway-integration:
-                type: aws_proxy
-                httpMethod: POST
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FastAPIFunction.Arn}/invocations"
-          /:
-            x-amazon-apigateway-any-method:
-              x-amazon-apigateway-integration:
-                type: aws_proxy
-                httpMethod: POST
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FastAPIFunction.Arn}/invocations"
-          # Protected /me endpoint with authorizer (must be after proxy to override)
-          /me:
-            get:
-              x-amazon-apigateway-integration:
-                type: aws_proxy
-                httpMethod: POST
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FastAPIFunction.Arn}/invocations"
-              security:
-                - JwtAuthorizer: []
-        securityDefinitions:
+      Auth:
+        Authorizers:
           JwtAuthorizer:
-            type: apiKey
-            name: Authorization
-            in: header
-            x-amazon-apigateway-authorizer:
-              type: token
-              authorizerUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:888577062296:function:authorizer/invocations"
-              authorizerCredentials: !GetAtt ApiGatewayInvokeRole.Arn
-              identitySource: method.request.header.Authorization
-              authorizerResultTtlInSeconds: 300
+            FunctionArn: arn:aws:lambda:us-east-1:888577062296:function:authorizer
+            Identity:
+              Header: Authorization
 
   FastAPIFunction:
     Type: AWS::Serverless::Function
@@ -150,7 +83,7 @@ Resources:
       CodeUri: ./
       Handler: app.lambda_handler.handler
       Events:
-        # All routes handled by DefinitionBody in the API
+        # General API routes (public)
         ApiEvent:
           Type: Api
           Properties:
@@ -163,6 +96,15 @@ Resources:
             RestApiId: !Ref FastAPIRestApi
             Path: /
             Method: ANY
+        # Protected /me endpoint with JWT authorizer
+        MeEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref FastAPIRestApi
+            Path: /me
+            Method: GET
+            Auth:
+              Authorizer: JwtAuthorizer
       Policies:
         - CloudWatchLogsFullAccess
       # Layers: [arn:aws:lambda:...:layer:your-shared-layer:1]
