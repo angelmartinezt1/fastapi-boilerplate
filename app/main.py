@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
 from app.routers import root, users, ulid
 from app.api import health
 from app.api.v1 import sellers
@@ -6,7 +7,11 @@ from app.api.v1 import users as v1_users
 from app.utils.logger import setup_logger
 from app.config.settings import app_config
 from app.middleware.lambda_init import LambdaInitMiddleware
-from app.middleware.validation_logging import ValidationLoggingMiddleware
+from app.exceptions.handlers import (
+    validation_exception_handler,
+    http_exception_handler,
+    general_exception_handler
+)
 
 
 def create_app() -> FastAPI:
@@ -28,9 +33,13 @@ def create_app() -> FastAPI:
         version="1.0.0",
     )
 
-    # Add middleware (order matters - last added is executed first)
-    app.add_middleware(ValidationLoggingMiddleware)
+    # Add middleware
     app.add_middleware(LambdaInitMiddleware)
+
+    # Add exception handlers
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(Exception, general_exception_handler)
 
     # Registrar rutas
     register_routes(app)
