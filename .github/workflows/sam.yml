@@ -44,7 +44,7 @@ jobs:
           fi
           echo "ENVIRONMENT=${ENVIRONMENT}" >> $GITHUB_ENV
           echo "STACK_NAME=t1-fastapi-${ENVIRONMENT}" >> $GITHUB_ENV
-          echo "API_STAGE_NAME=\$default" >> $GITHUB_ENV
+          echo "API_STAGE_NAME=v1" >> $GITHUB_ENV
           echo "🚀 Deploying to ${ENVIRONMENT} environment"
 
       - name: Setup Python 3.11
