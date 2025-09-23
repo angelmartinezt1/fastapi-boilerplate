@@ -62,7 +62,12 @@ This is a FastAPI boilerplate designed for dual deployment: local development an
 **Configuration System**: Located in `app/config/`, uses Pydantic settings with environment-based configuration:
 - `app/config/base.py` - Base configuration class
 - `app/config/app.py` - Application-specific settings with environment detection
+- `app/config/database.py` - Database configuration for MongoDB
 - `app/config/settings.py` - Singleton configuration instance
+
+**Performance Configuration**:
+- `ENABLE_DOCS=false` - Disable OpenAPI/Swagger docs in production for faster cold starts
+- Database indexes are pre-created via deployment script (not at runtime)
 
 **Lambda Detection**: The app automatically detects Lambda environment using `AppConfig.is_lambda` property that checks for AWS Lambda environment variables.
 

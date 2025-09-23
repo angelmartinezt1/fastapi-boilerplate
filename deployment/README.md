@@ -26,7 +26,16 @@ This script will create all necessary indexes for optimal performance:
 Make sure these environment variables are set:
 
 ```bash
+# Database
 MONGODB_URL=mongodb+srv://user:password@cluster.mongodb.net/database
+
+# Performance optimization
+ENABLE_DOCS=false  # Disable OpenAPI/Swagger for faster Lambda cold starts
+
+# Application settings
+ENVIRONMENT=production
+DEBUG=false
+LOG_LEVEL=WARNING
 ```
 
 ### Deployment Checklist

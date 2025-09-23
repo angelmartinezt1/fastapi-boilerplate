@@ -13,6 +13,9 @@ class AppConfig(BaseConfig):
     environment: str = "production"
     log_level: str = "INFO"
 
+    # Documentation settings
+    enable_docs: bool = True
+
     @property
     def is_development(self) -> bool:
         return self.environment.lower() in ["development", "dev", "local"]

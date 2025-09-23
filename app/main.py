@@ -27,10 +27,20 @@ def create_app() -> FastAPI:
         "debug": app_config.debug
     }})
 
+    # Configure documentation URLs based on enable_docs setting
+    openapi_url = "/openapi.json" if app_config.enable_docs else None
+    docs_url = "/docs" if app_config.enable_docs else None
+    redoc_url = "/redoc" if app_config.enable_docs else None
+
     app = FastAPI(
         title="Mi FastAPI App",
         description="API con soporte para desarrollo local y Lambda",
         version="1.0.0",
+        openapi_url=openapi_url,
+        docs_url=docs_url,
+        redoc_url=redoc_url,
+        # Reduce startup overhead
+        generate_unique_id_function=lambda route: f"{route.tags[0]}-{route.name}" if route.tags else route.name
     )
 
     # Add middleware
