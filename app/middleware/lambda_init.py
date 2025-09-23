@@ -28,7 +28,11 @@ class LambdaInitMiddleware(BaseHTTPMiddleware):
                             print("🔄 Lambda cold start: Initializing database...")
                         else:
                             print("🔄 Local development: Initializing database...")
-                        await init_database()
+
+                        # Run sync init_database in executor
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(None, init_database)
+
                         _db_initialized = True
                         if app_config.is_lambda:
                             print("✅ Lambda: Database initialized successfully")

@@ -2,12 +2,14 @@ from typing import Optional, Tuple, List, Dict, Any
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorCollection
+from pymongo.collection import Collection
+from pymongo import DESCENDING
 from app.models.users import UserModel
 from app.schemas.users import UserCreateRequest, UserUpdateRequest, UserResponse, UserListResponse
 from app.schemas.common import PaginationInfo
 from app.dependencies.common import PaginationParams, SearchParams
 from app.utils.logger import logger
+from app.core.database import run_in_executor
 
 
 class UserService:
@@ -17,22 +19,21 @@ class UserService:
     async def create_user(seller_id: int, user_data: UserCreateRequest) -> UserResponse:
         """Create a new user"""
         try:
-            collection = await UserModel.get_collection()
+            def _create_user():
+                collection = UserModel.get_collection()
+                user_doc = UserModel.create_document(seller_id, user_data.model_dump())
+                result = collection.insert_one(user_doc)
+                user_doc["_id"] = result.inserted_id
+                return user_doc
 
-            # Create document
-            user_doc = UserModel.create_document(seller_id, user_data.model_dump())
-
-            # Insert user
-            result = await collection.insert_one(user_doc)
+            user_doc = await run_in_executor(_create_user)
 
             logger.info("User created successfully", extra={"extra_data": {
-                "user_id": str(result.inserted_id),
+                "user_id": str(user_doc["_id"]),
                 "seller_id": seller_id,
                 "email": user_data.email
             }})
 
-            # Return created user
-            user_doc["_id"] = result.inserted_id
             return UserResponse.from_dict(user_doc)
 
         except DuplicateKeyError:
@@ -59,12 +60,14 @@ class UserService:
     async def get_user_by_id(seller_id: int, user_id: str) -> UserResponse:
         """Get user by ID"""
         try:
-            collection = await UserModel.get_collection()
+            def _get_user():
+                collection = UserModel.get_collection()
+                return collection.find_one({
+                    "_id": ObjectId(user_id),
+                    "seller_id": seller_id
+                })
 
-            user_doc = await collection.find_one({
-                "_id": ObjectId(user_id),
-                "seller_id": seller_id
-            })
+            user_doc = await run_in_executor(_get_user)
 
             if not user_doc:
                 raise HTTPException(
@@ -192,29 +195,28 @@ class UserService:
     ) -> UserListResponse:
         """List users with pagination and search"""
         try:
-            collection = await UserModel.get_collection()
+            def _list_users():
+                collection = UserModel.get_collection()
 
-            # Build filter
-            filter_doc = UserModel.build_search_filter(
-                seller_id=seller_id,
-                search=search.search,
-                is_active=search.is_active
-            )
+                # Build filter
+                filter_doc = UserModel.build_search_filter(
+                    seller_id=seller_id,
+                    search=search.search,
+                    is_active=search.is_active
+                )
 
-            # Get total count
-            total_count = await collection.count_documents(filter_doc)
+                # Get total count
+                total_count = collection.count_documents(filter_doc)
 
-            # Build aggregation pipeline for better performance
-            pipeline = [
-                {"$match": filter_doc},
-                {"$sort": {"created_at": -1}},
-                {"$skip": pagination.skip},
-                {"$limit": pagination.page_size}
-            ]
+                # Get users with sorting and pagination
+                users = list(collection.find(filter_doc)
+                           .sort("created_at", DESCENDING)
+                           .skip(pagination.skip)
+                           .limit(pagination.page_size))
 
-            # Execute aggregation
-            cursor = collection.aggregate(pipeline)
-            users = await cursor.to_list(length=pagination.page_size)
+                return users, total_count
+
+            users, total_count = await run_in_executor(_list_users)
 
             # Convert to response objects
             user_responses = [UserResponse.from_dict(user) for user in users]

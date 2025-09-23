@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorCollection
+from pymongo.collection import Collection
+from pymongo import ASCENDING, DESCENDING, TEXT
 from app.core.database import get_database
 from app.utils.logger import logger
 
@@ -10,53 +11,57 @@ class UserModel:
     """User database model for MongoDB operations"""
 
     COLLECTION_NAME = "users"
+    _indexes_created = False
 
     @classmethod
-    async def get_collection(cls) -> AsyncIOMotorCollection:
+    def get_collection(cls) -> Collection:
         """Get users collection with proper indexing"""
         db = get_database()
         collection = db[cls.COLLECTION_NAME]
 
-        # Create indexes for high concurrency and performance
-        await cls._ensure_indexes(collection)
+        # Create indexes only once for better performance
+        if not cls._indexes_created:
+            cls._ensure_indexes(collection)
+            cls._indexes_created = True
+
         return collection
 
     @classmethod
-    async def _ensure_indexes(cls, collection: AsyncIOMotorCollection):
+    def _ensure_indexes(cls, collection: Collection):
         """Ensure required indexes exist for optimal performance"""
         try:
             # Compound index for seller_id + email (unique)
-            await collection.create_index(
-                [("seller_id", 1), ("email", 1)],
+            collection.create_index(
+                [("seller_id", ASCENDING), ("email", ASCENDING)],
                 unique=True,
                 background=True,
                 name="seller_email_unique"
             )
 
             # Index for seller_id queries
-            await collection.create_index(
-                [("seller_id", 1)],
+            collection.create_index(
+                [("seller_id", ASCENDING)],
                 background=True,
                 name="seller_id_idx"
             )
 
             # Index for email queries
-            await collection.create_index(
-                [("email", 1)],
+            collection.create_index(
+                [("email", ASCENDING)],
                 background=True,
                 name="email_idx"
             )
 
             # Compound index for search queries
-            await collection.create_index(
-                [("seller_id", 1), ("is_active", 1), ("created_at", -1)],
+            collection.create_index(
+                [("seller_id", ASCENDING), ("is_active", ASCENDING), ("created_at", DESCENDING)],
                 background=True,
                 name="seller_active_created_idx"
             )
 
             # Text index for search functionality
-            await collection.create_index(
-                [("email", "text"), ("first_name", "text"), ("last_name", "text")],
+            collection.create_index(
+                [("email", TEXT), ("first_name", TEXT), ("last_name", TEXT)],
                 background=True,
                 name="search_text_idx"
             )
