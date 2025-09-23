@@ -2,9 +2,11 @@ from fastapi import FastAPI
 from app.routers import root, users, ulid
 from app.api import health
 from app.api.v1 import sellers
+from app.api.v1 import users as v1_users
 from app.utils.logger import setup_logger
 from app.config.settings import app_config
 from app.middleware.lambda_init import LambdaInitMiddleware
+from app.middleware.validation_logging import ValidationLoggingMiddleware
 
 
 def create_app() -> FastAPI:
@@ -26,7 +28,8 @@ def create_app() -> FastAPI:
         version="1.0.0",
     )
 
-    # Add Lambda initialization middleware
+    # Add middleware (order matters - last added is executed first)
+    app.add_middleware(ValidationLoggingMiddleware)
     app.add_middleware(LambdaInitMiddleware)
 
     # Registrar rutas
@@ -45,6 +48,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(users.router)
     app.include_router(ulid.router)
     app.include_router(sellers.router)
+    app.include_router(v1_users.router)
 
 
 # Instancia de la app para importación directa si es necesario

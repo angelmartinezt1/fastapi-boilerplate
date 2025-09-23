@@ -3,7 +3,7 @@ Database Initialization Middleware
 Handles lazy database initialization for AWS Lambda cold starts and local development
 """
 import asyncio
-from fastapi import Request, Response
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.config.settings import app_config
 from app.core.database import init_database
