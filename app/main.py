@@ -1,12 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from app.routers import root, users, ulid
-from app.api import health
+from app.api import health, me
 from app.api.v1 import sellers
 from app.api.v1 import users as v1_users
 from app.utils.logger import setup_logger
 from app.config.settings import app_config
 from app.middleware.lambda_init import LambdaInitMiddleware
+from app.middleware.auth import LambdaAuthorizerMiddleware
 from app.exceptions.handlers import (
     validation_exception_handler,
     http_exception_handler,
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
 
     # Add middleware
     app.add_middleware(LambdaInitMiddleware)
+    app.add_middleware(LambdaAuthorizerMiddleware)
 
     # Add exception handlers
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
@@ -64,6 +66,7 @@ def register_routes(app: FastAPI) -> None:
     """
     app.include_router(root.router)
     app.include_router(health.router)
+    app.include_router(me.router)
     app.include_router(users.router)
     app.include_router(ulid.router)
     app.include_router(sellers.router)
