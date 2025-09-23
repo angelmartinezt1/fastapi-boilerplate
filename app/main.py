@@ -4,6 +4,7 @@ from app.api import health
 from app.api.v1 import sellers
 from app.utils.logger import setup_logger
 from app.config.settings import app_config
+from app.middleware.lambda_init import LambdaInitMiddleware
 
 
 def create_app() -> FastAPI:
@@ -24,6 +25,9 @@ def create_app() -> FastAPI:
         description="API con soporte para desarrollo local y Lambda",
         version="1.0.0",
     )
+
+    # Add Lambda initialization middleware
+    app.add_middleware(LambdaInitMiddleware)
 
     # Registrar rutas
     register_routes(app)
