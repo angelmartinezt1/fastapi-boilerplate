@@ -10,7 +10,7 @@ Parameters:
     Description: Environment name
   ApiGatewayStageName:
     Type: String
-    Default: prod
+    Default: v1
     Description: REST API stage name
   VpcId:
     Type: String
