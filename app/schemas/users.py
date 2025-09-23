@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field, EmailStr, validator
 from bson import ObjectId
+from app.schemas.common import PaginationInfo
 
 
 class UserCreateRequest(BaseModel):
@@ -68,11 +69,8 @@ class UserResponse(BaseModel):
 
 class UserListResponse(BaseModel):
     """Schema for paginated user list response"""
-    users: list[UserResponse] = Field(..., description="List of users")
-    total_count: int = Field(..., description="Total number of users")
-    page: int = Field(..., description="Current page number")
-    page_size: int = Field(..., description="Number of items per page")
-    has_next: bool = Field(..., description="Whether there are more pages")
+    data: list[UserResponse] = Field(..., description="List of users")
+    pagination: PaginationInfo = Field(..., description="Pagination information")
 
 
 class UserSearchQuery(BaseModel):

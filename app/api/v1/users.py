@@ -1,11 +1,13 @@
 from fastapi import APIRouter, status, Depends
-from app.schemas.response import StandardResponse
+from fastapi.responses import JSONResponse
+from app.schemas.response import StandardResponse, ResponseMetadata
 from app.schemas.users import (
     UserCreateRequest,
     UserUpdateRequest,
     UserResponse,
     UserListResponse
 )
+from app.schemas.common import PaginatedResponse
 from app.services.users import UserService
 from app.dependencies.common import (
     validate_seller_id,
@@ -108,8 +110,6 @@ async def delete_user(
 
 @router.get(
     "/api/{seller_id}/users",
-    response_model=StandardResponse[UserListResponse],
-    response_model_exclude_none=True,
     tags=["Users"],
     summary="List users",
     description="Get a paginated list of users with optional search and filtering"
@@ -118,11 +118,20 @@ async def list_users(
     seller_id: int = Depends(validate_seller_id),
     pagination: PaginationParams = Depends(get_pagination_params),
     search: SearchParams = Depends(get_search_params)
-) -> StandardResponse[UserListResponse]:
+):
     """List users with pagination and search"""
-    users = await UserService.list_users(seller_id, pagination, search)
+    users_response = await UserService.list_users(seller_id, pagination, search)
 
-    return create_success_response(
-        data=users,
-        message="Users retrieved successfully"
-    )
+    # Create response with data and pagination separated
+    from datetime import datetime, timezone
+    response_data = {
+        "metadata": {
+            "success": True,
+            "message": "Users retrieved successfully",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        },
+        "data": users_response.data,
+        "pagination": users_response.pagination.model_dump()
+    }
+
+    return response_data

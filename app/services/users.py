@@ -5,6 +5,7 @@ from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
 from app.models.users import UserModel
 from app.schemas.users import UserCreateRequest, UserUpdateRequest, UserResponse, UserListResponse
+from app.schemas.common import PaginationInfo
 from app.dependencies.common import PaginationParams, SearchParams
 from app.utils.logger import logger
 
@@ -219,14 +220,22 @@ class UserService:
             user_responses = [UserResponse.from_dict(user) for user in users]
 
             # Calculate pagination info
-            has_next = (pagination.skip + len(users)) < total_count
+            total_pages = (total_count + pagination.page_size - 1) // pagination.page_size
+            has_next = pagination.page < total_pages
+            has_previous = pagination.page > 1
 
-            return UserListResponse(
-                users=user_responses,
+            pagination_info = PaginationInfo(
                 total_count=total_count,
                 page=pagination.page,
                 page_size=pagination.page_size,
-                has_next=has_next
+                total_pages=total_pages,
+                has_next=has_next,
+                has_previous=has_previous
+            )
+
+            return UserListResponse(
+                data=user_responses,
+                pagination=pagination_info
             )
 
         except Exception as e:
