@@ -42,6 +42,14 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
         requires_auth = any(path.startswith(protected) for protected in self.protected_paths)
 
         if requires_auth:
+            # Debug: Log request scope info
+            logger.debug("Processing protected route", extra={"extra_data": {
+                "path": path,
+                "method": request.method,
+                "scope_type": type(request.scope).__name__,
+                "scope_keys": list(request.scope.keys()) if hasattr(request.scope, 'keys') else "N/A"
+            }})
+
             # Extraer contexto del Lambda Authorizer
             auth_context = self._extract_authorizer_context(request)
 
@@ -113,23 +121,60 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
         Extrae el contexto del Lambda Authorizer desde el evento de API Gateway
         """
         try:
-            # En Lambda, el contexto del authorizer está disponible en el evento
-            # API Gateway v2 lo coloca en request.scope["aws.event"]["requestContext"]["authorizer"]
+            # Para REST API, el contexto está en request.scope["aws.event"]["requestContext"]["authorizer"]
+            # Para HTTP API v2, está en request.scope["aws.event"]["requestContext"]["authorizer"]["lambda"]
 
-            aws_event = getattr(request.scope, "aws.event", None)
+            # Método 1: Extraer desde request.scope (Mangum)
+            if hasattr(request.scope, 'get') and 'aws.event' in request.scope:
+                aws_event = request.scope['aws.event']
+            else:
+                # Método 2: Buscar en request.scope directamente
+                aws_event = getattr(request.scope, 'get', lambda k, d=None: None)('aws.event')
+
             if not aws_event:
-                # Intentar extraer desde headers personalizados (fallback)
+                # Método 3: Buscar en diferentes ubicaciones de request
+                for attr in ['aws_event', '_aws_event', 'event']:
+                    aws_event = getattr(request, attr, None)
+                    if aws_event:
+                        break
+
+            if not aws_event:
+                logger.debug("No AWS event found in request scope", extra={"extra_data": {
+                    "scope_keys": list(request.scope.keys()) if hasattr(request.scope, 'keys') else "N/A",
+                    "path": request.url.path
+                }})
                 return self._extract_from_headers(request)
 
             request_context = aws_event.get("requestContext", {})
             authorizer = request_context.get("authorizer", {})
 
-            # API Gateway v2 estructura
+            logger.debug("Found authorizer context", extra={"extra_data": {
+                "authorizer_keys": list(authorizer.keys()) if authorizer else [],
+                "request_context_keys": list(request_context.keys()),
+                "path": request.url.path
+            }})
+
+            # REST API: contexto directo en authorizer
+            if authorizer and "lambda" not in authorizer:
+                # Filtrar campos de sistema de API Gateway
+                context = {}
+                for key, value in authorizer.items():
+                    if not key.startswith('principalId') and key not in ['policy', 'context']:
+                        context[key] = value
+
+                # Si hay un campo 'context', usar ese
+                if 'context' in authorizer:
+                    context.update(authorizer['context'])
+
+                if context:
+                    return context
+
+            # HTTP API v2: contexto en authorizer.lambda
             if "lambda" in authorizer:
                 return authorizer["lambda"]
 
-            # API Gateway v1 estructura (fallback)
-            if authorizer:
+            # Fallback: todo el objeto authorizer si tiene datos útiles
+            if authorizer and len(authorizer) > 1:  # Más que solo principalId
                 return authorizer
 
             return None
@@ -137,7 +182,8 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             logger.error("Failed to extract Lambda authorizer context", extra={"extra_data": {
                 "error": str(e),
-                "path": request.url.path
+                "path": request.url.path,
+                "error_type": type(e).__name__
             }})
             return None
 
