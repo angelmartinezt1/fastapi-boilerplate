@@ -17,7 +17,7 @@ from app.dependencies.common import (
     PaginationParams,
     SearchParams
 )
-from app.utils.response import create_success_response
+from app.utils.response import create_success_response, create_fast_response, create_paginated_response
 from app.config.settings import app_config
 
 router = APIRouter()
@@ -47,15 +47,10 @@ async def create_user(
         )
     else:
         # Fast path: bypass Pydantic validation
-        from datetime import datetime, timezone
-        return {
-            "metadata": {
-                "success": True,
-                "message": "User created successfully",
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            },
-            "data": UserResponse.from_dict_fast(user_doc)
-        }
+        return create_fast_response(
+            data=UserResponse.from_dict_fast(user_doc),
+            message="User created successfully"
+        )
 
 
 @router.get(
@@ -81,15 +76,10 @@ async def get_user(
         )
     else:
         # Fast path: bypass Pydantic validation
-        from datetime import datetime, timezone
-        return {
-            "metadata": {
-                "success": True,
-                "message": "User retrieved successfully",
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            },
-            "data": UserResponse.from_dict_fast(user_doc)
-        }
+        return create_fast_response(
+            data=UserResponse.from_dict_fast(user_doc),
+            message="User retrieved successfully"
+        )
 
 
 @router.put(
@@ -149,16 +139,9 @@ async def list_users(
     """List users with pagination and search"""
     users_response = await UserService.list_users(seller_id, pagination, search)
 
-    # Create response with data and pagination separated
-    from datetime import datetime, timezone
-    response_data = {
-        "metadata": {
-            "success": True,
-            "message": "Users retrieved successfully",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        },
-        "data": users_response.data,
-        "pagination": users_response.pagination.model_dump()
-    }
-
-    return response_data
+    # Use reusable paginated response utility
+    return create_paginated_response(
+        data=users_response.data,
+        pagination=users_response.pagination,
+        message="Users retrieved successfully"
+    )
