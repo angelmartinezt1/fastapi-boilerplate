@@ -44,7 +44,16 @@ jobs:
           fi
           echo "ENVIRONMENT=${ENVIRONMENT}" >> $GITHUB_ENV
           echo "STACK_NAME=t1-fastapi-${ENVIRONMENT}" >> $GITHUB_ENV
-          echo "API_STAGE_NAME=v1" >> $GITHUB_ENV
+
+          # Set stage name: use env var if exists, otherwise default to 'dev'
+          if [ -n "${{ vars.API_STAGE_NAME }}" ]; then
+            echo "API_STAGE_NAME=${{ vars.API_STAGE_NAME }}" >> $GITHUB_ENV
+            echo "📝 Using API_STAGE_NAME from GitHub vars: ${{ vars.API_STAGE_NAME }}"
+          else
+            echo "API_STAGE_NAME=dev" >> $GITHUB_ENV
+            echo "📝 Using default API_STAGE_NAME: dev"
+          fi
+
           echo "🚀 Deploying to ${ENVIRONMENT} environment"
 
       - name: Setup Python 3.11

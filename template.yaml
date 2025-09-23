@@ -10,7 +10,7 @@ Parameters:
     Description: Environment name
   ApiGatewayStageName:
     Type: String
-    Default: v1
+    Default: dev
     Description: REST API stage name
   VpcId:
     Type: String
@@ -75,6 +75,8 @@ Resources:
             FunctionArn: arn:aws:lambda:us-east-1:888577062296:function:authorizer
             Identity:
               Header: Authorization
+      # Prevent automatic stage creation
+      OpenApiVersion: '3.0.1'
 
   FastAPIFunction:
     Type: AWS::Serverless::Function
