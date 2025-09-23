@@ -2,72 +2,19 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from bson import ObjectId
 from pymongo.collection import Collection
-from pymongo import ASCENDING, DESCENDING, TEXT
 from app.core.database import get_database
-from app.utils.logger import logger
 
 
 class UserModel:
     """User database model for MongoDB operations"""
 
     COLLECTION_NAME = "users"
-    _indexes_created = False
 
     @classmethod
     def get_collection(cls) -> Collection:
-        """Get users collection with proper indexing"""
+        """Get users collection - indexes are pre-created via deployment script"""
         db = get_database()
-        collection = db[cls.COLLECTION_NAME]
-
-        # Create indexes only once for better performance
-        if not cls._indexes_created:
-            cls._ensure_indexes(collection)
-            cls._indexes_created = True
-
-        return collection
-
-    @classmethod
-    def _ensure_indexes(cls, collection: Collection):
-        """Ensure required indexes exist for optimal performance"""
-        try:
-            # Compound index for seller_id + email (unique)
-            collection.create_index(
-                [("seller_id", ASCENDING), ("email", ASCENDING)],
-                unique=True,
-                background=True,
-                name="seller_email_unique"
-            )
-
-            # Index for seller_id queries
-            collection.create_index(
-                [("seller_id", ASCENDING)],
-                background=True,
-                name="seller_id_idx"
-            )
-
-            # Index for email queries
-            collection.create_index(
-                [("email", ASCENDING)],
-                background=True,
-                name="email_idx"
-            )
-
-            # Compound index for search queries
-            collection.create_index(
-                [("seller_id", ASCENDING), ("is_active", ASCENDING), ("created_at", DESCENDING)],
-                background=True,
-                name="seller_active_created_idx"
-            )
-
-            # Text index for search functionality
-            collection.create_index(
-                [("email", TEXT), ("first_name", TEXT), ("last_name", TEXT)],
-                background=True,
-                name="search_text_idx"
-            )
-
-        except Exception as e:
-            logger.warning("Failed to create some indexes", extra={"extra_data": {"error": str(e)}})
+        return db[cls.COLLECTION_NAME]
 
     @staticmethod
     def create_document(seller_id: int, user_data: Dict[str, Any]) -> Dict[str, Any]:

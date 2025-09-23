@@ -29,6 +29,12 @@ flake8 app/
 pytest tests/
 ```
 
+### Database Setup (Required Before Deployment)
+```bash
+# Create MongoDB indexes (run once per environment)
+python deployment/create_indexes.py
+```
+
 ### AWS SAM Deployment
 ```bash
 # Build SAM application
