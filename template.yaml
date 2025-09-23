@@ -109,16 +109,7 @@ Resources:
           title: !Sub "${AWS::StackName} API"
           version: "1.0"
         paths:
-          # Protected /me endpoint with authorizer
-          /me:
-            get:
-              x-amazon-apigateway-integration:
-                type: aws_proxy
-                httpMethod: POST
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FastAPIFunction.Arn}/invocations"
-              security:
-                - JwtAuthorizer: []
-          # All other routes without authorizer
+          # All routes without authorizer first
           /{proxy+}:
             x-amazon-apigateway-any-method:
               x-amazon-apigateway-integration:
@@ -131,6 +122,15 @@ Resources:
                 type: aws_proxy
                 httpMethod: POST
                 uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FastAPIFunction.Arn}/invocations"
+          # Protected /me endpoint with authorizer (must be after proxy to override)
+          /me:
+            get:
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FastAPIFunction.Arn}/invocations"
+              security:
+                - JwtAuthorizer: []
         securityDefinitions:
           JwtAuthorizer:
             type: apiKey
@@ -150,7 +150,7 @@ Resources:
       CodeUri: ./
       Handler: app.lambda_handler.handler
       Events:
-        # General API routes
+        # All routes handled by DefinitionBody in the API
         ApiEvent:
           Type: Api
           Properties:
@@ -163,15 +163,6 @@ Resources:
             RestApiId: !Ref FastAPIRestApi
             Path: /
             Method: ANY
-        # Protected /me endpoint
-        MeEvent:
-          Type: Api
-          Properties:
-            RestApiId: !Ref FastAPIRestApi
-            Path: /me
-            Method: GET
-            Auth:
-              Authorizer: JwtAuthorizer
       Policies:
         - CloudWatchLogsFullAccess
       # Layers: [arn:aws:lambda:...:layer:your-shared-layer:1]
