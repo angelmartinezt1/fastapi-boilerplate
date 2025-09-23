@@ -27,15 +27,25 @@ def init_database() -> None:
             "max_pool_size": db_config.mongodb_max_pool_size
         }})
 
-        # Create MongoDB client
+        # Create MongoDB client optimized for Lambda/high-performance
         client = MongoClient(
             db_config.connection_string,
-            maxPoolSize=db_config.mongodb_max_pool_size,
-            minPoolSize=db_config.mongodb_min_pool_size,
-            maxIdleTimeMS=db_config.mongodb_max_idle_time_ms,
-            serverSelectionTimeoutMS=db_config.mongodb_server_selection_timeout_ms,
-            connectTimeoutMS=db_config.mongodb_connect_timeout_ms,
-            socketTimeoutMS=db_config.mongodb_socket_timeout_ms,
+            # Lambda-optimized pool settings
+            maxPoolSize=2,  # Lambda: max 1-2 concurrent requests
+            minPoolSize=1,  # Keep 1 connection warm
+            maxIdleTimeMS=60000,  # 1 minute (typical Lambda lifecycle)
+            # Aggressive timeouts for faster failures
+            serverSelectionTimeoutMS=2000,  # 2 seconds vs 5 seconds
+            connectTimeoutMS=3000,  # 3 seconds vs 10 seconds
+            socketTimeoutMS=5000,   # 5 seconds vs 20 seconds
+            # Performance optimizations
+            retryWrites=False,  # Skip retries in Lambda (fail fast)
+            retryReads=False,   # Skip read retries
+            w=1,  # Minimal write concern
+            readPreference="primary",  # No secondary reads
+            # Connection efficiency
+            maxConnecting=1,  # Only 1 connection attempt at a time
+            waitQueueTimeoutMS=1000  # Fast queue timeout
         )
 
         # Get database

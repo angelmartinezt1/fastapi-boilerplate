@@ -19,7 +19,14 @@ class UserCreateRequest(BaseModel):
             raise ValueError('Phone number must contain only digits, spaces, hyphens, and plus sign')
         return v
 
-    model_config = {"str_strip_whitespace": True}
+    model_config = {
+        "str_strip_whitespace": True,
+        # Performance optimizations
+        "validate_assignment": False,  # Skip validation on assignment
+        "validate_default": False,     # Skip default value validation
+        "use_list": True,             # Faster list processing
+        "arbitrary_types_allowed": True # Allow any types without validation
+    }
 
 
 class UserUpdateRequest(BaseModel):
@@ -36,7 +43,14 @@ class UserUpdateRequest(BaseModel):
             raise ValueError('Phone number must contain only digits, spaces, hyphens, and plus sign')
         return v
 
-    model_config = {"str_strip_whitespace": True}
+    model_config = {
+        "str_strip_whitespace": True,
+        # Performance optimizations
+        "validate_assignment": False,
+        "validate_default": False,
+        "use_list": True,
+        "arbitrary_types_allowed": True
+    }
 
 
 class UserResponse(BaseModel):
@@ -50,6 +64,18 @@ class UserResponse(BaseModel):
     is_active: bool = Field(..., description="Whether the user is active")
     created_at: datetime = Field(..., description="User creation timestamp")
     updated_at: datetime = Field(..., description="User last update timestamp")
+
+    model_config = {
+        # Performance optimizations for response serialization
+        "validate_assignment": False,
+        "validate_default": False,
+        "use_list": True,
+        "arbitrary_types_allowed": True,
+        "json_encoders": {
+            # Fast datetime serialization
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    }
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -66,6 +92,21 @@ class UserResponse(BaseModel):
             updated_at=data["updated_at"]
         )
 
+    @classmethod
+    def from_dict_fast(cls, data: dict) -> dict:
+        """Ultra-fast serialization bypassing Pydantic completely"""
+        return {
+            "id": str(data["_id"]),
+            "seller_id": data["seller_id"],
+            "email": data["email"],
+            "first_name": data["first_name"],
+            "last_name": data["last_name"],
+            "phone_number": data.get("phone_number"),
+            "is_active": data.get("is_active", True),
+            "created_at": data["created_at"].isoformat() if data["created_at"] else None,
+            "updated_at": data["updated_at"].isoformat() if data["updated_at"] else None
+        }
+
 
 class UserListResponse(BaseModel):
     """Schema for paginated user list response"""
@@ -80,4 +121,11 @@ class UserSearchQuery(BaseModel):
     page: int = Field(default=1, ge=1, description="Page number")
     page_size: int = Field(default=20, ge=1, le=100, description="Items per page")
 
-    model_config = {"str_strip_whitespace": True}
+    model_config = {
+        "str_strip_whitespace": True,
+        # Performance optimizations
+        "validate_assignment": False,
+        "validate_default": False,
+        "use_list": True,
+        "arbitrary_types_allowed": True
+    }

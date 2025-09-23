@@ -57,6 +57,47 @@ class UserService:
             )
 
     @staticmethod
+    async def create_user_fast(seller_id: int, user_data: UserCreateRequest) -> dict:
+        """Create a new user returning raw document (fast path)"""
+        try:
+            def _create_user():
+                collection = UserModel.get_collection()
+                user_doc = UserModel.create_document(seller_id, user_data.model_dump())
+                result = collection.insert_one(user_doc)
+                user_doc["_id"] = result.inserted_id
+                return user_doc
+
+            user_doc = await run_in_executor(_create_user)
+
+            logger.info("User created successfully", extra={"extra_data": {
+                "user_id": str(user_doc["_id"]),
+                "seller_id": seller_id,
+                "email": user_data.email
+            }})
+
+            return user_doc
+
+        except DuplicateKeyError:
+            logger.warning("Duplicate user creation attempt", extra={"extra_data": {
+                "seller_id": seller_id,
+                "email": user_data.email
+            }})
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="User with this email already exists for this seller"
+            )
+        except Exception as e:
+            logger.error("Failed to create user", extra={"extra_data": {
+                "seller_id": seller_id,
+                "email": user_data.email,
+                "error": str(e)
+            }})
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user"
+            )
+
+    @staticmethod
     async def get_user_by_id(seller_id: int, user_id: str) -> UserResponse:
         """Get user by ID"""
         try:
@@ -76,6 +117,40 @@ class UserService:
                 )
 
             return UserResponse.from_dict(user_doc)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Failed to get user", extra={"extra_data": {
+                "user_id": user_id,
+                "seller_id": seller_id,
+                "error": str(e)
+            }})
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve user"
+            )
+
+    @staticmethod
+    async def get_user_by_id_fast(seller_id: int, user_id: str) -> dict:
+        """Get user by ID returning raw document (fast path)"""
+        try:
+            def _get_user():
+                collection = UserModel.get_collection()
+                return collection.find_one({
+                    "_id": ObjectId(user_id),
+                    "seller_id": seller_id
+                })
+
+            user_doc = await run_in_executor(_get_user)
+
+            if not user_doc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+
+            return user_doc
 
         except HTTPException:
             raise

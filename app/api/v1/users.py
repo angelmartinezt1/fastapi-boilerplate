@@ -18,13 +18,14 @@ from app.dependencies.common import (
     SearchParams
 )
 from app.utils.response import create_success_response
+from app.config.settings import app_config
 
 router = APIRouter()
 
 
 @router.post(
     "/api/{seller_id}/users",
-    response_model=StandardResponse[UserResponse],
+    response_model=StandardResponse[UserResponse] if app_config.validate_responses else None,
     status_code=status.HTTP_201_CREATED,
     response_model_exclude_none=True,
     tags=["Users"],
@@ -34,19 +35,32 @@ router = APIRouter()
 async def create_user(
     user_data: UserCreateRequest,
     seller_id: int = Depends(validate_seller_id)
-) -> StandardResponse[UserResponse]:
+):
     """Create a new user"""
-    user = await UserService.create_user(seller_id, user_data)
+    user_doc = await UserService.create_user_fast(seller_id, user_data)
 
-    return create_success_response(
-        data=user,
-        message="User created successfully"
-    )
+    if app_config.validate_responses:
+        user = UserResponse.from_dict(user_doc)
+        return create_success_response(
+            data=user,
+            message="User created successfully"
+        )
+    else:
+        # Fast path: bypass Pydantic validation
+        from datetime import datetime, timezone
+        return {
+            "metadata": {
+                "success": True,
+                "message": "User created successfully",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            },
+            "data": UserResponse.from_dict_fast(user_doc)
+        }
 
 
 @router.get(
     "/api/{seller_id}/users/{user_id}",
-    response_model=StandardResponse[UserResponse],
+    response_model=StandardResponse[UserResponse] if app_config.validate_responses else None,
     response_model_exclude_none=True,
     tags=["Users"],
     summary="Get user by ID",
@@ -55,14 +69,27 @@ async def create_user(
 async def get_user(
     seller_id: int = Depends(validate_seller_id),
     user_id: str = Depends(validate_user_id)
-) -> StandardResponse[UserResponse]:
+):
     """Get user by ID"""
-    user = await UserService.get_user_by_id(seller_id, user_id)
+    user_doc = await UserService.get_user_by_id_fast(seller_id, user_id)
 
-    return create_success_response(
-        data=user,
-        message="User retrieved successfully"
-    )
+    if app_config.validate_responses:
+        user = UserResponse.from_dict(user_doc)
+        return create_success_response(
+            data=user,
+            message="User retrieved successfully"
+        )
+    else:
+        # Fast path: bypass Pydantic validation
+        from datetime import datetime, timezone
+        return {
+            "metadata": {
+                "success": True,
+                "message": "User retrieved successfully",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            },
+            "data": UserResponse.from_dict_fast(user_doc)
+        }
 
 
 @router.put(

@@ -16,6 +16,9 @@ class AppConfig(BaseConfig):
     # Documentation settings
     enable_docs: bool = True
 
+    # Performance settings
+    validate_responses: bool = True  # Set to False in production for faster responses
+
     @property
     def is_development(self) -> bool:
         return self.environment.lower() in ["development", "dev", "local"]
