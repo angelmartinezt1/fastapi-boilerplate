@@ -16,20 +16,17 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.protected_paths = [
-            "/api/",  # Todas las rutas de API requieren autenticación
-            "/me"     # Endpoint de perfil de usuario
+            # "/api/",  # Todas las rutas de API requieren autenticación
+            "/me"  # Endpoint de perfil de usuario
         ]
-        self.excluded_paths = [
-            "/health",
-            "/docs",
-            "/openapi.json",
-            "/redoc"
-        ]
+        self.excluded_paths = ["/health", "/docs", "/openapi.json", "/redoc"]
 
     async def dispatch(self, request: Request, call_next):
         # Solo aplicar en Lambda
         if not app_config.is_lambda:
-            logger.debug("Skipping Lambda authorizer middleware (not in Lambda environment)")
+            logger.debug(
+                "Skipping Lambda authorizer middleware (not in Lambda environment)"
+            )
             return await call_next(request)
 
         path = request.url.path
@@ -39,63 +36,85 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Verificar si la ruta requiere autenticación
-        requires_auth = any(path.startswith(protected) for protected in self.protected_paths)
+        requires_auth = any(
+            path.startswith(protected) for protected in self.protected_paths
+        )
 
         if requires_auth:
             # Debug: Log request scope info
-            logger.debug("Processing protected route", extra={"extra_data": {
-                "path": path,
-                "method": request.method,
-                "scope_type": type(request.scope).__name__,
-                "scope_keys": list(request.scope.keys()) if hasattr(request.scope, 'keys') else "N/A"
-            }})
+            logger.debug(
+                "Processing protected route",
+                extra={
+                    "extra_data": {
+                        "path": path,
+                        "method": request.method,
+                        "scope_type": type(request.scope).__name__,
+                        "scope_keys": (
+                            list(request.scope.keys())
+                            if hasattr(request.scope, "keys")
+                            else "N/A"
+                        ),
+                    }
+                },
+            )
 
             # Extraer contexto del Lambda Authorizer
             auth_context = self._extract_authorizer_context(request)
 
             if not auth_context:
-                logger.warning("Missing Lambda authorizer context", extra={"extra_data": {
-                    "path": path,
-                    "method": request.method,
-                    "headers": dict(request.headers)
-                }})
+                logger.warning(
+                    "Missing Lambda authorizer context",
+                    extra={
+                        "extra_data": {
+                            "path": path,
+                            "method": request.method,
+                            "headers": dict(request.headers),
+                        }
+                    },
+                )
                 return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     content={
                         "metadata": {
                             "success": False,
                             "message": "Authentication required",
-                            "timestamp": None
+                            "timestamp": None,
                         },
-                        "errors": [{
-                            "field": "authorization",
-                            "message": "Missing or invalid authorization context"
-                        }]
-                    }
+                        "errors": [
+                            {
+                                "field": "authorization",
+                                "message": "Missing or invalid authorization context",
+                            }
+                        ],
+                    },
                 )
 
             # Validar contexto requerido
             validation_error = self._validate_context(auth_context)
             if validation_error:
-                logger.warning("Invalid Lambda authorizer context", extra={"extra_data": {
-                    "path": path,
-                    "method": request.method,
-                    "validation_error": validation_error,
-                    "context": auth_context
-                }})
+                logger.warning(
+                    "Invalid Lambda authorizer context",
+                    extra={
+                        "extra_data": {
+                            "path": path,
+                            "method": request.method,
+                            "validation_error": validation_error,
+                            "context": auth_context,
+                        }
+                    },
+                )
                 return JSONResponse(
                     status_code=status.HTTP_403_FORBIDDEN,
                     content={
                         "metadata": {
                             "success": False,
                             "message": "Access forbidden",
-                            "timestamp": None
+                            "timestamp": None,
                         },
-                        "errors": [{
-                            "field": "authorization",
-                            "message": validation_error
-                        }]
-                    }
+                        "errors": [
+                            {"field": "authorization", "message": validation_error}
+                        ],
+                    },
                 )
 
             # Agregar contexto a la request para uso en endpoints
@@ -106,13 +125,18 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
             request.state.access_type = auth_context.get("accessType")
             request.state.scope = auth_context.get("scope")
 
-            logger.info("Lambda authorizer context validated", extra={"extra_data": {
-                "path": path,
-                "method": request.method,
-                "user_id": auth_context.get("sub"),
-                "email": auth_context.get("email"),
-                "access_type": auth_context.get("accessType")
-            }})
+            logger.info(
+                "Lambda authorizer context validated",
+                extra={
+                    "extra_data": {
+                        "path": path,
+                        "method": request.method,
+                        "user_id": auth_context.get("sub"),
+                        "email": auth_context.get("email"),
+                        "access_type": auth_context.get("accessType"),
+                    }
+                },
+            )
 
         return await call_next(request)
 
@@ -125,46 +149,67 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
             # Para HTTP API v2, está en request.scope["aws.event"]["requestContext"]["authorizer"]["lambda"]
 
             # Método 1: Extraer desde request.scope (Mangum)
-            if hasattr(request.scope, 'get') and 'aws.event' in request.scope:
-                aws_event = request.scope['aws.event']
+            if hasattr(request.scope, "get") and "aws.event" in request.scope:
+                aws_event = request.scope["aws.event"]
             else:
                 # Método 2: Buscar en request.scope directamente
-                aws_event = getattr(request.scope, 'get', lambda k, d=None: None)('aws.event')
+                aws_event = getattr(request.scope, "get", lambda k, d=None: None)(
+                    "aws.event"
+                )
 
             if not aws_event:
                 # Método 3: Buscar en diferentes ubicaciones de request
-                for attr in ['aws_event', '_aws_event', 'event']:
+                for attr in ["aws_event", "_aws_event", "event"]:
                     aws_event = getattr(request, attr, None)
                     if aws_event:
                         break
 
             if not aws_event:
-                logger.debug("No AWS event found in request scope", extra={"extra_data": {
-                    "scope_keys": list(request.scope.keys()) if hasattr(request.scope, 'keys') else "N/A",
-                    "path": request.url.path
-                }})
+                logger.debug(
+                    "No AWS event found in request scope",
+                    extra={
+                        "extra_data": {
+                            "scope_keys": (
+                                list(request.scope.keys())
+                                if hasattr(request.scope, "keys")
+                                else "N/A"
+                            ),
+                            "path": request.url.path,
+                        }
+                    },
+                )
                 return self._extract_from_headers(request)
 
             request_context = aws_event.get("requestContext", {})
             authorizer = request_context.get("authorizer", {})
 
-            logger.debug("Found authorizer context", extra={"extra_data": {
-                "authorizer_keys": list(authorizer.keys()) if authorizer else [],
-                "request_context_keys": list(request_context.keys()),
-                "path": request.url.path
-            }})
+            logger.debug(
+                "Found authorizer context",
+                extra={
+                    "extra_data": {
+                        "authorizer_keys": (
+                            list(authorizer.keys()) if authorizer else []
+                        ),
+                        "request_context_keys": list(request_context.keys()),
+                        "path": request.url.path,
+                    }
+                },
+            )
 
             # REST API: contexto directo en authorizer
             if authorizer and "lambda" not in authorizer:
                 # Filtrar campos de sistema de API Gateway
                 context = {}
                 for key, value in authorizer.items():
-                    if not key.startswith('principalId') and key not in ['policy', 'context']:
+                    if not key.startswith("principalId") and key not in [
+                        "policy",
+                        "context",
+                    ]:
                         context[key] = value
 
                 # Si hay un campo 'context', usar ese
-                if 'context' in authorizer:
-                    context.update(authorizer['context'])
+                if "context" in authorizer:
+                    context.update(authorizer["context"])
 
                 if context:
                     return context
@@ -180,11 +225,16 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
             return None
 
         except Exception as e:
-            logger.error("Failed to extract Lambda authorizer context", extra={"extra_data": {
-                "error": str(e),
-                "path": request.url.path,
-                "error_type": type(e).__name__
-            }})
+            logger.error(
+                "Failed to extract Lambda authorizer context",
+                extra={
+                    "extra_data": {
+                        "error": str(e),
+                        "path": request.url.path,
+                        "error_type": type(e).__name__,
+                    }
+                },
+            )
             return None
 
     def _extract_from_headers(self, request: Request) -> Optional[Dict[str, Any]]:
@@ -208,7 +258,7 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
                 "x-apigateway-scope": "scope",
                 "x-apigateway-current-store": "current_store",
                 "x-apigateway-issuer": "iss",
-                "x-apigateway-azp": "azp"
+                "x-apigateway-azp": "azp",
             }
 
             for header_name, context_key in mapping.items():
@@ -219,9 +269,10 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
             return auth_context if auth_context else None
 
         except Exception as e:
-            logger.error("Failed to extract context from headers", extra={"extra_data": {
-                "error": str(e)
-            }})
+            logger.error(
+                "Failed to extract context from headers",
+                extra={"extra_data": {"error": str(e)}},
+            )
             return None
 
     def _validate_context(self, context: Dict[str, Any]) -> Optional[str]:
@@ -235,7 +286,9 @@ class LambdaAuthorizerMiddleware(BaseHTTPMiddleware):
                 return f"Missing required field: {field}"
 
         # Validaciones adicionales
-        if not isinstance(context.get("email"), str) or "@" not in context.get("email", ""):
+        if not isinstance(context.get("email"), str) or "@" not in context.get(
+            "email", ""
+        ):
             return "Invalid email format"
 
         return None
