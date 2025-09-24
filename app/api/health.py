@@ -27,7 +27,7 @@ class HealthData(BaseModel):
 )
 async def health_check():
     logger.info(
-        "Health check requested",
+        "Health check requested ",
         extra={
             "extra_data": {"endpoint": "/health", "environment": settings.environment}
         },
