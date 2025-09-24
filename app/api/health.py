@@ -27,7 +27,7 @@ class HealthData(BaseModel):
 )
 async def health_check():
     logger.info(
-        "Health check requested ",
+        "Health check requested",
         extra={
             "extra_data": {"endpoint": "/health", "environment": settings.environment}
         },
@@ -35,7 +35,7 @@ async def health_check():
 
     # Check database status if MongoDB URL is configured
     database_status = None
-    overall_status = "healthy"
+    overall_status = "AWS healthy"
 
     if db_config.mongodb_url:
         try:
