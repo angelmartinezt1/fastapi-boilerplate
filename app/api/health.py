@@ -35,7 +35,7 @@ async def health_check():
 
     # Check database status if MongoDB URL is configured
     database_status = None
-    overall_status = "AWS healthy"
+    overall_status = "healthy"
 
     if db_config.mongodb_url:
         try:
